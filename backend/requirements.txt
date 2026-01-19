@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sentence-transformers
+umap-learn
+scikit-learn
+numpy
+pydantic
+groq
+python-dotenv

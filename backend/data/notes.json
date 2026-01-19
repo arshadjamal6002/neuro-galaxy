@@ -1,0 +1,47 @@
+{
+  "notes": [
+    "Machine learning algorithms can predict stock prices",
+    "Neural networks are inspired by biological neurons",
+    "Python is a popular programming language for data science",
+    "Deep learning requires large amounts of training data",
+    "Quantum computing uses quantum mechanical phenomena",
+    "The theory of relativity revolutionized physics",
+    "Black holes have an event horizon",
+    "Gravity is a fundamental force in the universe",
+    "The speed of light is constant in a vacuum",
+    "Mathematics is the language of science",
+    "Calculus deals with rates of change",
+    "Linear algebra is essential for machine learning",
+    "Probability theory helps in statistical inference",
+    "Graph theory studies networks and connections",
+
+    "Transformer models use self-attention mechanisms.",
+    "Backpropagation calculates gradients for weight updates.",
+    "Llama-3 is a dense decoder-only transformer architecture.",
+    "Reinforcement learning involves agents, environments, and rewards.",
+    "Overfitting occurs when a model learns noise instead of signal.",
+    "Dropout is a regularization technique to prevent overfitting.",
+    "Embeddings map discrete tokens to continuous vector spaces.",
+    "RAG (Retrieval Augmented Generation) connects LLMs to private data.",
+
+    "Sous vide requires precise temperature control for water baths.",
+    "The Maillard reaction creates browning and flavor in seared meat.",
+    "Sourdough starters rely on wild yeast fermentation.",
+    "Proper knife skills increase safety and chopping speed.",
+    "Emulsions like mayonnaise require slowly adding oil to yolks.",
+
+    "Black holes have an event horizon from which light cannot escape.",
+    "General relativity describes gravity as the curvature of spacetime.",
+    "The James Webb telescope observes infrared light from early stars.",
+    "Neutron stars are the collapsed cores of massive stars.",
+    "Dark matter accounts for most of the mass in the universe.",
+    
+    "React's useEffect hook handles side effects in components.",
+    "FastAPI uses Pydantic for data validation.",
+    "WebSockets allow for full-duplex communication channels.",
+    "Tailwind CSS uses utility classes for rapid styling.",
+    "Docker containers package applications with all dependencies."
+  ]
+}
+
+
