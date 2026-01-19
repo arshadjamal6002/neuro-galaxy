@@ -112,3 +112,44 @@ async def add_notes(request: NotesRequest) -> Dict:
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error adding notes: {str(e)}")
 
+
+@router.get("/notes/{note_id}/similar")
+async def get_similar_notes(note_id: int) -> Dict:
+    """
+    Get the top 3 most similar notes to a given note using cosine similarity.
+    
+    Args:
+        note_id: ID of the target note (0-indexed)
+        
+    Returns:
+        Dictionary with 'similar_notes' list containing note information
+    """
+    try:
+        # Load notes from storage
+        notes = load_notes()
+        
+        if not notes:
+            raise HTTPException(status_code=404, detail="No notes found in storage")
+        
+        # Ensure embeddings are available by processing notes if cache is empty
+        if galaxy_renderer.embeddings_cache is None or len(galaxy_renderer.embeddings_cache) == 0:
+            galaxy_renderer.process_notes(notes)
+        
+        # Validate note_id
+        if note_id < 0 or note_id >= len(notes):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Note ID {note_id} is out of range. Valid range: 0-{len(notes) - 1}"
+            )
+        
+        # Find similar notes
+        similar_notes = galaxy_renderer.find_similar_notes(note_id, top_k=3, notes=notes)
+        
+        return {
+            "similar_notes": similar_notes
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error finding similar notes: {str(e)}")
+

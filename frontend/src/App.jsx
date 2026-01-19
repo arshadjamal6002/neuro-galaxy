@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Galaxy from './components/Galaxy'
+import { useSoundSystem } from './hooks/useSoundSystem'
 import './App.css'
 
 function App() {
@@ -8,9 +9,15 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
+  const [similarNotes, setSimilarNotes] = useState([])
+  const [loadingSimilar, setLoadingSimilar] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [newNote, setNewNote] = useState('')
   const [isAddingNote, setIsAddingNote] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  
+  // Initialize sound system
+  const { playClick } = useSoundSystem()
 
   useEffect(() => {
     fetchNodes()
@@ -36,9 +43,26 @@ function App() {
     }
   }
 
-  const handleNodeClick = (node) => {
+  const handleNodeClick = async (node) => {
     setSelectedNode(node)
+    playClick() // Play click sound on node selection
     console.log('Selected node:', node)
+    
+    // Fetch similar notes
+    try {
+      setLoadingSimilar(true)
+      const response = await fetch(`/api/notes/${node.id}/similar`)
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      setSimilarNotes(data.similar_notes || [])
+    } catch (err) {
+      console.error('Error fetching similar notes:', err)
+      setSimilarNotes([])
+    } finally {
+      setLoadingSimilar(false)
+    }
   }
 
   const handleAddNote = async (e) => {
@@ -106,7 +130,16 @@ function App() {
 
   return (
     <div className="app-container">
-      <div className="sidebar">
+      {/* Sidebar Toggle Button */}
+      <button
+        className="sidebar-toggle"
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        aria-label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}
+      >
+        {isSidebarOpen ? '◀' : '▶'}
+      </button>
+      
+      <div className={`sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
         <h1>Neuro-Galaxy</h1>
         <div className="search-container">
           <input
@@ -131,32 +164,111 @@ function App() {
         )}
         <div className="legend">
           <h3>Categories</h3>
-          {Array.from(new Set(nodes.map(n => {
-            // Use cluster_label if it exists, otherwise fallback to cluster_names mapping, then generic
-            return n.cluster_label || clusterNames[n.category] || `Category ${n.category}`
-          }))).sort().map((label, index) => {
-            // Find the category ID for this label to get the color
-            const nodeWithLabel = nodes.find(n => {
-              const nodeLabel = n.cluster_label || clusterNames[n.category] || `Category ${n.category}`
-              return nodeLabel === label
-            })
-            const catId = nodeWithLabel ? nodeWithLabel.category : index
-            return (
-              <div key={label} className="legend-item">
+          <div className="legend-badges">
+            {Array.from(new Set(nodes.map(n => {
+              // Use cluster_label if it exists, otherwise fallback to cluster_names mapping, then generic
+              return n.cluster_label || clusterNames[n.category] || `Category ${n.category}`
+            }))).sort().map((label, index) => {
+              // Find the category ID for this label to get the color
+              const nodeWithLabel = nodes.find(n => {
+                const nodeLabel = n.cluster_label || clusterNames[n.category] || `Category ${n.category}`
+                return nodeLabel === label
+              })
+              const catId = nodeWithLabel ? nodeWithLabel.category : index
+              const colorHex = ['FF3366', '00FFFF', '3366FF', 'FF66FF', '66FF66', 'FFFF00', 'FF9900', '9966FF'][catId % 8]
+              const r = parseInt(colorHex.substring(0, 2), 16)
+              const g = parseInt(colorHex.substring(2, 4), 16)
+              const b = parseInt(colorHex.substring(4, 6), 16)
+              
+              return (
                 <span 
-                  className="legend-color" 
+                  key={label} 
+                  className="legend-badge"
                   style={{ 
-                    backgroundColor: `#${['FF3366', '00FFFF', '3366FF', 'FF66FF', '66FF66', 'FFFF00', 'FF9900', '9966FF'][catId % 8]}`
+                    backgroundColor: `rgba(${r}, ${g}, ${b}, 0.15)`,
+                    borderColor: `rgba(${r}, ${g}, ${b}, 0.4)`,
+                    color: `#${colorHex}`
                   }}
-                />
-                <span>{label}</span>
-              </div>
-            )
-          })}
+                >
+                  <span 
+                    className="legend-badge-dot"
+                    style={{ 
+                      backgroundColor: `#${colorHex}`
+                    }}
+                  />
+                  {label}
+                </span>
+              )
+            })}
+          </div>
         </div>
       </div>
-      <div className="galaxy-view">
-        <Galaxy nodes={filteredNodes} onNodeClick={handleNodeClick} />
+      <div className={`galaxy-view ${!isSidebarOpen ? 'galaxy-view-fullscreen' : ''}`}>
+        <Galaxy nodes={filteredNodes} onNodeClick={handleNodeClick} selectedNodeId={selectedNode?.id} />
+      </div>
+      
+      {/* Neural Inspector Side Panel HUD */}
+      <div className={`side-panel ${selectedNode ? 'side-panel-open' : ''}`}>
+        {selectedNode && (
+          <div className="side-panel-content">
+            <button 
+              className="side-panel-close"
+              onClick={() => {
+                setSelectedNode(null)
+                setSimilarNotes([])
+              }}
+              aria-label="Close panel"
+            >
+              ×
+            </button>
+            <div className="side-panel-header">
+              <h2>Neural Inspector</h2>
+            </div>
+            <div className="side-panel-note">
+              <div className="note-text">{selectedNode.label}</div>
+              <div className="note-category">
+                <span 
+                  className="category-badge"
+                  style={{
+                    backgroundColor: `#${['FF3366', '00FFFF', '3366FF', 'FF66FF', '66FF66', 'FFFF00', 'FF9900', '9966FF'][selectedNode.category % 8]}`
+                  }}
+                />
+                <span className="category-label">
+                  {selectedNode.cluster_label || clusterNames[selectedNode.category] || `Category ${selectedNode.category}`}
+                </span>
+              </div>
+            </div>
+            <div className="side-panel-related">
+              <h3>Related Thoughts</h3>
+              {loadingSimilar ? (
+                <div className="loading-similar">Analyzing connections...</div>
+              ) : similarNotes.length > 0 ? (
+                <div className="similar-notes-list">
+                  {similarNotes.map((note) => (
+                    <div key={note.id} className="similar-note-item">
+                      <div className="similar-note-header">
+                        <span className="similarity-score">
+                          {Math.round(note.similarity_score * 100)}% match
+                        </span>
+                        <span 
+                          className="similar-note-category"
+                          style={{
+                            color: `#${['FF3366', '00FFFF', '3366FF', 'FF66FF', '66FF66', 'FFFF00', 'FF9900', '9966FF'][note.category % 8]}`
+                          }}
+                        >
+                          {note.cluster_label || `Category ${note.category}`}
+                        </span>
+                      </div>
+                      <div className="similar-note-text">{note.label}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="no-similar-notes">No similar notes found</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Brain Dump Input Bar */}

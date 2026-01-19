@@ -1,5 +1,5 @@
-import { useRef, useState, useMemo } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { useRef, useState, useMemo, useEffect } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { OrbitControls, Text, Stars } from '@react-three/drei'
 import * as THREE from 'three'
 
@@ -95,13 +95,18 @@ function Node({ node, onClick, scale = 1, centroid = [0, 0, 0] }) {
   })
   
   return (
-    <group
-      position={[centeredX, centeredY, centeredZ]}
-      onClick={() => onClick?.(node)}
-      onPointerOver={() => setHovered(true)}
-      onPointerOut={() => setHovered(false)}
-    >
-      {/* Main glowing sphere */}
+    <group position={[centeredX, centeredY, centeredZ]}>
+      {/* Invisible hitbox sphere - much larger for easier clicking */}
+      <mesh
+        onClick={() => onClick?.(node)}
+        onPointerOver={() => setHovered(true)}
+        onPointerOut={() => setHovered(false)}
+      >
+        <sphereGeometry args={[1.5, 16, 16]} />
+        <meshBasicMaterial transparent opacity={0} />
+      </mesh>
+      
+      {/* Main glowing sphere - visual only, no events */}
       <mesh ref={meshRef}>
         <sphereGeometry args={[0.12, 32, 32]} />
         <meshStandardMaterial
@@ -113,7 +118,7 @@ function Node({ node, onClick, scale = 1, centroid = [0, 0, 0] }) {
         />
       </mesh>
       
-      {/* Outer glow ring */}
+      {/* Outer glow ring - visual only, no events */}
       <mesh>
         <sphereGeometry args={[0.15, 16, 16]} />
         <meshStandardMaterial
@@ -144,8 +149,72 @@ function Node({ node, onClick, scale = 1, centroid = [0, 0, 0] }) {
   )
 }
 
-export default function Galaxy({ nodes = [], onNodeClick }) {
+// Camera animation component
+function CameraController({ selectedNodeId, nodes, scale, centroid, controlsRef }) {
+  const { camera } = useThree()
+  const targetPositionRef = useRef(null)
+  const targetLookAtRef = useRef(null)
+  const isAnimatingRef = useRef(false)
+  
+  useEffect(() => {
+    if (selectedNodeId === null || selectedNodeId === undefined) {
+      // Reset animation when no node is selected
+      targetPositionRef.current = null
+      targetLookAtRef.current = null
+      isAnimatingRef.current = false
+      return
+    }
+    
+    // Find the selected node
+    const selectedNode = nodes.find(n => n.id === selectedNodeId)
+    if (!selectedNode) return
+    
+    // Calculate centered and scaled position
+    const nodeX = (selectedNode.x - centroid[0]) * scale
+    const nodeY = (selectedNode.y - centroid[1]) * scale
+    const nodeZ = (selectedNode.z - centroid[2]) * scale
+    
+    // Calculate camera position offset (slightly above and behind the node)
+    const offsetDistance = 5
+    const offsetX = nodeX + offsetDistance * 0.7
+    const offsetY = nodeY + offsetDistance * 0.5
+    const offsetZ = nodeZ + offsetDistance * 0.7
+    
+    // Set target position and look-at point
+    targetPositionRef.current = new THREE.Vector3(offsetX, offsetY, offsetZ)
+    targetLookAtRef.current = new THREE.Vector3(nodeX, nodeY, nodeZ)
+    isAnimatingRef.current = true
+  }, [selectedNodeId, nodes, scale, centroid])
+  
+  useFrame((state, delta) => {
+    if (!controlsRef?.current) return
+    
+    if (isAnimatingRef.current && targetPositionRef.current && targetLookAtRef.current) {
+      // Smooth interpolation (lerp) for camera position
+      const lerpFactor = 0.05
+      camera.position.lerp(targetPositionRef.current, lerpFactor)
+      
+      // Smooth interpolation for camera target
+      const currentTarget = controlsRef.current.target
+      currentTarget.lerp(targetLookAtRef.current, lerpFactor)
+      controlsRef.current.update()
+      
+      // Check if animation is complete (close enough)
+      const distanceToTarget = camera.position.distanceTo(targetPositionRef.current)
+      const targetDistance = currentTarget.distanceTo(targetLookAtRef.current)
+      
+      if (distanceToTarget < 0.1 && targetDistance < 0.1) {
+        isAnimatingRef.current = false
+      }
+    }
+  })
+  
+  return null
+}
+
+export default function Galaxy({ nodes = [], onNodeClick, selectedNodeId = null }) {
   const SCALE_FACTOR = 50 // Multiply coordinates by 50 to spread out the galaxy
+  const controlsRef = useRef()
   
   // Calculate centroid (average X, Y, Z) of all nodes
   const centroid = useMemo(() => {
@@ -237,15 +306,25 @@ export default function Galaxy({ nodes = [], onNodeClick }) {
       
       {/* Cinematic camera controls with auto-rotation - looking at [0,0,0] */}
       <OrbitControls
+        ref={controlsRef}
         enableDamping
         dampingFactor={0.05}
         minDistance={maxDistance * 0.3}
         maxDistance={maxDistance * 3}
         target={[0, 0, 0]}
-        autoRotate
+        autoRotate={selectedNodeId === null}
         autoRotateSpeed={0.5}
         enableZoom={true}
         enablePan={true}
+      />
+      
+      {/* Camera animation controller */}
+      <CameraController 
+        selectedNodeId={selectedNodeId} 
+        nodes={nodes} 
+        scale={SCALE_FACTOR} 
+        centroid={centroid}
+        controlsRef={controlsRef}
       />
       
       {/* Constellations - connecting nearby nodes */}

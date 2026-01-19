@@ -32,6 +32,7 @@ class GalaxyRenderer:
         self.n_clusters = n_clusters
         self.kmeans = None
         self.umap_reducer = None
+        self.embeddings_cache = None  # Cache embeddings for similarity search
         # Initialize Groq client if API key is available
         self.groq_client = None
         groq_api_key = os.getenv("GROQ_API_KEY")
@@ -119,6 +120,8 @@ class GalaxyRenderer:
         
         # Step 1: Generate embeddings (384 dimensions)
         embeddings = self.model.encode(notes, show_progress_bar=False)
+        # Cache embeddings for similarity search
+        self.embeddings_cache = embeddings
         
         # Step 2: Run K-means clustering on 384-dim embeddings to find semantic topics
         self.kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
@@ -162,4 +165,68 @@ class GalaxyRenderer:
             "nodes": nodes,
             "cluster_names": cluster_names_clean
         }
+    
+    def find_similar_notes(self, note_id: int, top_k: int = 3, notes: List[str] = None) -> List[Dict]:
+        """
+        Find the top_k most similar notes to a given note using cosine similarity.
+        
+        Args:
+            note_id: ID of the target note (0-indexed)
+            top_k: Number of similar notes to return (default: 3)
+            notes: Optional list of notes (required if embeddings cache is empty)
+            
+        Returns:
+            List of dictionaries with 'id', 'label', 'similarity_score', 'category', 'cluster_label'
+        """
+        # If embeddings cache is empty or doesn't match notes length, regenerate embeddings
+        if (self.embeddings_cache is None or len(self.embeddings_cache) == 0 or 
+            (notes is not None and len(self.embeddings_cache) != len(notes))):
+            if notes is None:
+                raise ValueError("Embeddings cache is empty and no notes provided to regenerate embeddings")
+            # Regenerate embeddings by processing notes
+            self.process_notes(notes)
+        
+        # Validate note_id
+        if note_id < 0 or note_id >= len(self.embeddings_cache):
+            raise ValueError(f"Invalid note_id: {note_id}. Must be between 0 and {len(self.embeddings_cache) - 1}")
+        
+        # Get target embedding
+        target_embedding = self.embeddings_cache[note_id]
+        
+        # Calculate cosine similarity with all other embeddings
+        similarities = []
+        for i, embedding in enumerate(self.embeddings_cache):
+            if i == note_id:
+                continue  # Skip the target note itself
+            
+            # Calculate cosine similarity
+            dot_product = np.dot(target_embedding, embedding)
+            norm1 = np.linalg.norm(target_embedding)
+            norm2 = np.linalg.norm(embedding)
+            similarity = dot_product / (norm1 * norm2) if (norm1 * norm2) > 0 else 0
+            
+            similarities.append({
+                "id": i,
+                "similarity_score": float(similarity)
+            })
+        
+        # Sort by similarity score (descending) and get top_k
+        similarities.sort(key=lambda x: x["similarity_score"], reverse=True)
+        top_similar = similarities[:top_k]
+        
+        # If notes are provided, enrich with label, category, and cluster_label
+        if notes is not None and len(notes) > 0:
+            # Process notes to get node information (this will also cache embeddings if needed)
+            result = self.process_notes(notes)
+            nodes_dict = {node["id"]: node for node in result["nodes"]}
+            
+            # Enrich similarity results with node data
+            for item in top_similar:
+                node = nodes_dict.get(item["id"])
+                if node:
+                    item["label"] = node["label"]
+                    item["category"] = node["category"]
+                    item["cluster_label"] = node.get("cluster_label", f"Category {node['category']}")
+        
+        return top_similar
 
